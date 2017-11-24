@@ -5,9 +5,11 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <typeinfo>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "spline.h"
 
 using namespace std;
 
@@ -60,6 +62,142 @@ int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vect
 	return closestWaypoint;
 
 }
+
+// my functions
+int check_lane_left(vector<vector<double>> sensor, int car_lane, int car_s){
+  //cout << "inside "<<endl;
+
+  int dager_car = 0;
+  
+  vector<vector<double>> intrested_cars;
+  int left_lane = car_lane -1;
+  //double left_lane_s = 2+4*left_lane;
+  
+  if (left_lane < 0){
+    //cout <<"return 1"<<endl;
+    return 9;
+  }
+  for(int i = 0;i<sensor.size();i++){
+
+    double car_d = sensor[i][6];
+
+    int other_car_lane = (round(car_d)-2)/4;
+
+    //cout << "car d "<<car_d<<"car_lane"<<other_car_lane<<endl;
+
+    //cout << "car id"<<car_d<<endl;
+    //cout << "this is the other car lane "<< other_car_lane<< endl;
+
+    if(car_d < (2+4*left_lane+2) && car_d > (2+4*left_lane-2)){
+      intrested_cars.push_back(sensor[i]);
+    }
+      //cout << "some car in left lane "<<endl;
+      //cout << "car d "<<car_d<<"car_lane"<<other_car_lane<<endl;
+      
+
+  }
+  //cout << "total no of cars on left lane "<<intrested_cars.size()<<endl;  
+  if(intrested_cars.size()>0){
+    for (int i = 0;i<intrested_cars.size();i++){
+      //if no turn if there is a car in the same s value or greater than s value 
+      //same s
+      // s is dangerously less 
+      // s is greate 
+      //cout << "our car s "<<car_s<<"other car s "<<intrested_cars[i][5]<<"in lane "<< (round(intrested_cars[i][6])-2)/4<<endl;
+      cout << "'+' for car in front '-' for car in back "<<intrested_cars[i][5] - car_s<<endl;
+      if ((intrested_cars[i][5]>=car_s)&&(intrested_cars[i][5]<=car_s+40)){
+        //there is  car next to us , so dont take lane change 
+        //cout <<"dange car in front left"<<endl;
+        dager_car += 1;
+      }
+      else if ((intrested_cars[i][5]<=car_s)&&(intrested_cars[i][5]>=car_s-20)){
+        // dangerously close to us in back
+        //cout <<"dange car in back left"<<endl;
+        dager_car += 1;
+      }
+      else {
+        //cout <<"this car is safe to pass left"<<endl;
+      }
+
+
+    }
+    
+
+  }
+  else
+    return left_lane;
+  if (dager_car > 0){
+    // no lane change 
+    cout <<"return 2"<<endl;
+    return 9;
+  }
+  return left_lane; 
+}
+
+int check_lane_right(vector<vector<double>> sensor, int car_lane, int car_s){
+  //cout << "inside "<<endl;
+
+  int dager_car = 0;
+  
+  vector<vector<double>> intrested_cars;
+  int right_lane = car_lane +1;
+  //double left_lane_s = 2+4*left_lane;
+  
+  if (right_lane > 2){
+    //cout <<"return 1"<<endl;
+    return 9;
+  }
+  for(int i = 0;i<sensor.size();i++){
+
+    double car_d = sensor[i][6];
+
+    int other_car_lane = (round(car_d)-2)/4;
+    
+    //cout << "car id"<<car_d<<endl;
+    //cout << "this is the other car lane "<< other_car_lane<< endl;
+    if(car_d < (2+4*right_lane+2) && car_d > (2+4*right_lane-2)){
+      intrested_cars.push_back(sensor[i]);
+    }
+
+  }
+  //cout << "total no of cars on left lane "<<intrested_cars.size()<<endl;  
+  if(intrested_cars.size()>0){
+    for (int i = 0;i<intrested_cars.size();i++){
+      //if no turn if there is a car in the same s value or greater than s value 
+      //same s
+      // s is dangerously less 
+      // s is greate 
+      //cout << "my s : "<< car_s<<"intrested car s : "<< intrested_cars[i][5]<<endl;
+      if ((intrested_cars[i][5]>=car_s)&&(intrested_cars[i][5]<=car_s+40)){
+        //cout <<"dange car in front right"<<endl;
+        //there is  car next to us , so dont take lane change 
+
+        dager_car += 1;
+      }
+      else if ((intrested_cars[i][5]<=car_s)&&(intrested_cars[i][5]>=car_s-20)){
+        // dangerously close to us in back
+        //cout <<"dange car in back right"<<endl;
+        dager_car += 1;
+      }else {
+        //cout <<"this car is safe to pass right"<<endl;
+      }
+
+
+    }
+    
+
+  }
+  else
+    return right_lane;
+  if (dager_car > 0){
+    // no lane change 
+    cout <<"return 2"<<endl;
+    return 9;
+  }
+  return right_lane; 
+}
+
+//
 
 int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x, const vector<double> &maps_y)
 {
@@ -173,6 +311,8 @@ int main() {
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
 
+  
+
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
@@ -200,13 +340,19 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  int lane = 1;
+  double ref_vel = 0.0;
+
+  h.onMessage([&ref_vel,&lane,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     //auto sdata = string(data).substr(0, length);
     //cout << sdata << endl;
+
+    
+    
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
 
       auto s = hasData(data);
@@ -235,16 +381,209 @@ int main() {
           	double end_path_d = j[1]["end_path_d"];
 
           	// Sensor Fusion Data, a list of all other cars on the same side of the road.
-          	auto sensor_fusion = j[1]["sensor_fusion"];
+          	vector<vector<double>> sensor_fusion = j[1]["sensor_fusion"];
 
           	json msgJson;
+
+            int prev_size = previous_path_x.size();
 
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
 
+            //cout << "our cars s" << 2+4*lane<<endl;
+            for (int i = 0 ;i<7 ;i++)
+            //cout << "this is the sensor  "<< sensor_fusion[0][i]<<endl;
+
+
+
+
+            if(prev_size >0){
+              car_s = end_path_s;
+            }
+            
+            bool too_close = false;
+            //find ref_v to use
+            for (int i=0;i<sensor_fusion.size();i++){
+              //car is in my lane
+              float d = sensor_fusion[i][6];
+              if(d < (2+4*lane+2) && d > (2+4*lane-2)){
+
+                double vx = sensor_fusion[i][3];
+                double vy = sensor_fusion[i][4];
+                double check_speed = sqrt(vx*vx+vy*vy);
+                double check_car_s = sensor_fusion[i][5];
+
+                check_car_s += ((double)prev_size*.02*check_speed); // get the position of this car in future 
+                if ((check_car_s > car_s) && ((check_car_s-car_s)<30)){
+                  //ref_vel = 25.0;
+                  too_close = true;
+                  //if(lane > 0)
+                  //  lane = 0;
+                  
+                }
+              }
+            }
+
+            // if too close , check if we can make a lane change to left ,right
+            // if possible then make that change
+            // if not then slow down 
+            //cout << "this is the type "<<typeid(sensor_fusion).name();
+
+            if(too_close){
+              too_close = false;
+              int lane_choice_left = check_lane_left(sensor_fusion,lane,car_s);
+              int lane_choice_right = check_lane_right(sensor_fusion,lane,car_s);
+              if (lane_choice_left !=9){
+                cout << "choice is left"<<endl;
+                lane = lane_choice_left;
+              }
+              else if (lane_choice_right != 9){
+                cout << "choice is right"<<endl;
+                lane = lane_choice_right;
+              }
+              else
+                cout << "no choice"<<endl;
+
+              //cout << "this was the lane choice "<<lane_choice<<endl;
+              //check_lane_left(sensor_fusion,lane);
+              ref_vel -=0.424;
+            }
+            else if(ref_vel < 49.5)
+            {
+              ref_vel +=0.424;
+            }
+            //cout <<"this is the ref vel "<<ref_vel <<endl;
+
+
+
+            // we have to create widely spaced points 
+            vector<double> ptsx;
+            vector<double> ptsy;
+
+            double ref_x = car_x;
+            double ref_y = car_y;
+            double ref_yaw = deg2rad(car_yaw);
+
+            
+
+
+            if(prev_size < 2){
+              //use two points that make the path tangent to the car
+              double prev_car_x = car_x - cos(car_yaw);
+              double prev_car_y = car_y - sin(car_yaw);
+
+              ptsx.push_back(prev_car_x);
+              ptsx.push_back(car_x);
+
+              ptsy.push_back(prev_car_y);
+              ptsy.push_back(car_y);
+
+            }
+            //use the previous path end point as starting point
+            else{
+              ref_x = previous_path_x[prev_size-1];
+              ref_y = previous_path_y[prev_size-1];
+
+              double ref_x_prev = previous_path_x[prev_size-2];
+              double ref_y_prev = previous_path_y[prev_size-2];
+              ref_yaw = atan2(ref_y - ref_y_prev,ref_x - ref_x_prev);
+
+              //use the two points that make the path tangent to the previous path end point
+              ptsx.push_back(ref_x_prev);
+              ptsx.push_back(ref_x);
+
+              ptsy.push_back(ref_y_prev);
+              ptsy.push_back(ref_y);
+
+            }
+
+            // in frenet add evenly 30m spaced points ahead of the starting ref
+            
+            vector<double> next_wp0 = getXY(car_s+30,(2+4*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+            vector<double> next_wp1 = getXY(car_s+60,(2+4*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+            vector<double> next_wp2 = getXY(car_s+90,(2+4*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+
+            ptsx.push_back(next_wp0[0]);
+            ptsx.push_back(next_wp1[0]);
+            ptsx.push_back(next_wp2[0]);
+
+            ptsy.push_back(next_wp0[1]);
+            ptsy.push_back(next_wp1[1]);
+            ptsy.push_back(next_wp2[1]);
+
+            // we have to shft the car reference frame to 0 degree
+            for (int i =0;i<ptsx.size();i++){
+
+              double shift_x = ptsx[i]-ref_x;
+              double shift_y = ptsy[i]-ref_y;
+
+              ptsx[i] = (shift_x*cos(0-ref_yaw)-shift_y*sin(0-ref_yaw));
+              ptsy[i] = (shift_x*sin(0-ref_yaw)+shift_y*cos(0-ref_yaw));
+            }
+            // create a spline
+            tk::spline s;
+
+            //set (x,y) poits to spline 
+            s.set_points(ptsx,ptsy);
+
+
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-          	msgJson["next_x"] = next_x_vals;
+          	
+            //start with all of the previous path points from last time
+            for (int i=0;i<previous_path_x.size();i++){
+              next_x_vals.push_back(previous_path_x[i]);
+              next_y_vals.push_back(previous_path_y[i]);
+            }
+
+            // calc how to break up spline pts so we can travel at our desired ref speed
+            double target_x = 30.0;
+            double target_y = s(target_x);
+            double target_dist = sqrt((target_x)*(target_x)+
+                                      (target_y)*(target_y));
+
+            double x_add_on = 0;
+
+            // fill up the rest of our path planner after filling tit with prevouse points
+            for(int i=1;i<=50-previous_path_x.size();i++){
+
+              double N = (target_dist/(.02*ref_vel/2.24));//Mph to meter
+              double x_point = x_add_on + (target_x)/N;
+              double y_point = s(x_point);
+
+              x_add_on = x_point;
+
+              double x_ref = x_point;
+              double y_ref = y_point;
+
+              //rotate back to normal after rotation it earlier
+              x_point = (x_ref*cos(ref_yaw)-y_ref*sin(ref_yaw));
+              y_point = (x_ref*sin(ref_yaw)+y_ref*cos(ref_yaw));
+
+              x_point += ref_x;
+              y_point += ref_y;
+
+              next_x_vals.push_back(x_point);
+              next_y_vals.push_back(y_point);
+
+            }
+            //cout <<"this is the size "<<next_y_vals[0]<<endl;
+
+            /// this is the first type 
+            /* 
+            double dist_inc = 0.5;
+            for (int i=0;i< 30; i++){
+
+              double next_s = car_s +(i+1)*dist_inc;
+              double next_d = 6;
+              vector<double> xy = getXY(next_s,next_d,map_waypoints_s,map_waypoints_x,map_waypoints_y);
+
+              next_x_vals.push_back(xy[0]);
+              next_y_vals.push_back(xy[1]);
+            }
+            */
+
+            msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
